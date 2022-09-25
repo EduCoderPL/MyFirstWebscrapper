@@ -15,63 +15,68 @@ def main():
     def clear_table():
         tv.delete(*tv.get_children())
 
-
-    isWebscrapRun = False
-
     def parse_price(priceText):
-        if "Za darmo" in priceText:
-            return priceText
+        if "Za darmo" in priceText or "Zamienię" in priceText:
+            return 1000000.0
         return float(priceText.
                      replace(" ", "").
                      replace("zł", "").
                      replace(",", ".").
                      replace("donegocjacji", ""))
 
-    def parse_page(number):
-        URL = websiteEntry.get()
-        textLabel.config(text=f"Ogarniam stronę: {number}")
-        page = get(f"{URL}?page={number}")
-        bs = BeautifulSoup(page.content, "html.parser")
-        for offer in bs.find_all("div", class_="css-19ucd76"):
-            try:
-                title = offer.find("h6", class_="css-v3vynn-Text eu5v0x0").get_text().strip()
 
-                footer = offer.find("p", class_="css-p6wsjo-Text eu5v0x0").get_text().strip()
-                location = re.split('- ', footer)
-
-                price = offer.find("p", class_="css-wpfvmn-Text eu5v0x0").get_text().strip()
-                getURL = offer.find("a")['href']
-
-                offerURL = check_if_otodom(getURL)
-
-                tv.insert("", "end", values=(title, location[0], parse_price(price), offerURL))
-            except Exception as e:
-                print(e)
-        textLabel.config(text=f"Webscrapping finished.")
 
     def check_if_otodom(getURL):
         return getURL if "otodom" in getURL else f"https://www.olx.pl{getURL}"
 
     # python main.py setup
-    def webscrap(first: int, last: int):
+    def webscrap(first: int, last: int, toEnd = True):
         assert first <= last, "First argument must be less or equal second"
-        global isWebscrapRun
-        isWebscrapRun = True
         button['state'] = DISABLED
         buttonText.set("Webscrapping in progress")
         clear_table()
 
+        URL = websiteEntry.get()
 
-        for page in range(first, last + 1):
-            parse_page(page)
 
-        isWebscrapRun = False
+
+
+        for pageNumber in range(first, int(last) + 1):
+            parse_page(pageNumber, URL)
+
         button['state'] = NORMAL
         buttonText.set("Use Webscrapper")
 
+    def parse_page(number, url):
+        textLabel.config(text=f"Ogarniam stronę: {number}")
+        page = get(f"{url}?page={number}")
+        bs = BeautifulSoup(page.content, "html.parser")
+
+        for offer in bs.find_all("div", class_="css-19ucd76"):
+            try:
+                title = offer.find("h6", class_="css-v3vynn-Text eu5v0x0").get_text().strip()
+
+                footer = offer.find("p", class_="css-p6wsjo-Text eu5v0x0").get_text().strip()
+
+                location = re.split('- ', footer)
+
+                price = offer.find("p", class_="css-wpfvmn-Text eu5v0x0").get_text().strip()
+                offerURL = check_if_otodom(offer.find("a")['href'])
+
+
+                tv.insert("", "end", values=(title, location[0], parse_price(price), offerURL))
+            except Exception as e:
+                print(30 * "=")
+                print(offer)
+                print(30 * "=")
+
+        try:
+            return bs.find_all("a", class_="css-1mi714g")[-1].get_text().strip()
+        except:
+            return 2
+
     def execute_webscrapping():
-        if not isWebscrapRun:
-            Thread(target=webscrap, args=(1, 8), daemon=True).start()
+        Thread(target=webscrap, args=(1, 8), daemon=True).start()
 
     def select_item_threaded():
         Thread(target=select_item).start()
@@ -127,7 +132,30 @@ def main():
 
     frame = Frame(window, padx=20, pady=20)
 
-    tv = ttk.Treeview(frame, columns=(1, 2, 3, 4), show="headings", height=20)
+    def treeview_sort_column(tv, col, reverse):
+        l = [(tv.set(k, col), k) for k in tv.get_children('')]
+        try:
+            l.sort(key=lambda t: float(t[0]), reverse=reverse)
+            #      ^^^^^^^^^^^^^^^^^^^^^^^
+        except ValueError:
+            l.sort(reverse=reverse)
+
+        # rearrange items in sorted positions
+        for index, (val, k) in enumerate(l):
+            tv.move(k, '', index)
+
+        # reverse sort next time
+        tv.heading(col, command=lambda _col=col: treeview_sort_column(tv, _col, not reverse))
+
+
+    treeScroll = Scrollbar(frame)
+    treeScroll.pack(side=RIGHT, fill=Y)
+
+    tv = ttk.Treeview(frame, columns=(1, 2, 3, 4), show="headings", height=20, yscrollcommand=treeScroll.set)
+    for col in (1, 2, 3, 4):
+        tv.heading(col, text=col, command=lambda _col=col: treeview_sort_column(tv, _col, False))
+
+    treeScroll.config(command=tv.yview)
     tv.pack()
     tv.heading(1, text="Tytuł ogłoszenia")
     tv.heading(2, text="Lokalizacja")
