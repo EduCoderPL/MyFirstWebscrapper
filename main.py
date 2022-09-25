@@ -1,3 +1,4 @@
+import time
 from threading import Thread
 from bs4 import BeautifulSoup
 from requests import get
@@ -8,8 +9,18 @@ import re
 
 import webbrowser
 
+
 def main():
+
+    def clear_table():
+        tv.delete(*tv.get_children())
+
+
+    isWebscrapRun = False
+
     def parse_price(priceText):
+        if "Za darmo" in priceText:
+            return priceText
         return float(priceText.
                      replace(" ", "").
                      replace("zł", "").
@@ -17,60 +28,73 @@ def main():
                      replace("donegocjacji", ""))
 
     def parse_page(number):
+        URL = websiteEntry.get()
         textLabel.config(text=f"Ogarniam stronę: {number}")
         page = get(f"{URL}?page={number}")
         bs = BeautifulSoup(page.content, "html.parser")
         for offer in bs.find_all("div", class_="css-19ucd76"):
             try:
-                footer = offer.find("p", class_="css-p6wsjo-Text eu5v0x0").get_text().strip()
-
-                location = re.split('- |, ', footer)
                 title = offer.find("h6", class_="css-v3vynn-Text eu5v0x0").get_text().strip()
+
+                footer = offer.find("p", class_="css-p6wsjo-Text eu5v0x0").get_text().strip()
+                location = re.split('- ', footer)
+
                 price = offer.find("p", class_="css-wpfvmn-Text eu5v0x0").get_text().strip()
                 getURL = offer.find("a")['href']
-                if "otodom" in getURL:
-                    offerURL = getURL
-                else:
-                    offerURL = f"https://www.olx.pl{getURL}"
 
-                tv.insert("", "end", values=(title, location[1], parse_price(price), offerURL))
+                offerURL = check_if_otodom(getURL)
+
+                tv.insert("", "end", values=(title, location[0], parse_price(price), offerURL))
             except Exception as e:
-                print(offer)
                 print(e)
-        textLabel.config(text=f"Webscrapping zakończony.")
+        textLabel.config(text=f"Webscrapping finished.")
+
+    def check_if_otodom(getURL):
+        return getURL if "otodom" in getURL else f"https://www.olx.pl{getURL}"
+
     # python main.py setup
     def webscrap(first: int, last: int):
         assert first <= last, "First argument must be less or equal second"
+        global isWebscrapRun
+        isWebscrapRun = True
+        button['state'] = DISABLED
+        buttonText.set("Webscrapping in progress")
+        clear_table()
+
 
         for page in range(first, last + 1):
             parse_page(page)
 
+        isWebscrapRun = False
+        button['state'] = NORMAL
+        buttonText.set("Use Webscrapper")
+
     def execute_webscrapping():
-        Thread(target=webscrap, args=(1, 3)).start()
+        if not isWebscrapRun:
+            Thread(target=webscrap, args=(1, 8), daemon=True).start()
+
+    def select_item_threaded():
+        Thread(target=select_item).start()
 
     def select_item():
         selectedItems = tv.selection()
         if len(selectedItems) > 10:
             if messagebox.askokcancel("Dużo kart", f"Wybrałeś {len(selectedItems)} kart do otwarcia. Kontynuować?"):
-                for item in selectedItems:
-                    print(tv.item(item)["values"][3])
-                    webbrowser.open_new_tab(tv.item(item)["values"][3])
+                open_URL_from_table(selectedItems)
         else:
-            for item in selectedItems:
-                print(tv.item(item)["values"][3])
-                webbrowser.open_new_tab(tv.item(item)["values"][3])
+            open_URL_from_table(selectedItems)
 
-    if os.path.exists("dane.db"):
-        os.remove("dane.db")
+    def open_URL_from_table(selectedItems):
+        for item in selectedItems:
+            webbrowser.open_new_tab(tv.item(item)["values"][3])
 
-    URL = "https://www.olx.pl/d/nieruchomosci/stancje-pokoje/krakow/"
     window = Tk()
-    window.maxsize(1280, 640)
-    window.minsize(1280, 640)
+    window.maxsize(1280, 800)
+    window.minsize(1280, 800)
 
     buttonFrame = Frame(window, bd=5, padx=10, pady=10)
-
-
+    buttonText = StringVar()
+    buttonText.set("Use Webscrapper")
     button = Button(buttonFrame,
                     text="Use Webscrapper",
                     command=
@@ -83,10 +107,11 @@ def main():
                     state=ACTIVE,  # ACTIVE, DISABLED - czy przycisk jest aktywny, czy nie
                     compound="top",
                     width=25,
+                    textvariable=buttonText,
                     )
     button2 = Button(buttonFrame,
                      text="Open selected websites",
-                     command=Thread(target=select_item).start(),
+                     command=select_item_threaded,
                      font=("Comic Sans", 18),
                      fg="#00FF00",
                      bg="black",
@@ -94,15 +119,11 @@ def main():
                      activebackground="#393939",  #
                      state=ACTIVE,  # ACTIVE, DISABLED - czy przycisk jest aktywny, czy nie
                      compound="top",
-                        width=25,
+                     width=25,
                      )
-
 
     button.pack(side=LEFT)
     button2.pack(side=RIGHT)
-
-
-
 
     frame = Frame(window, padx=20, pady=20)
 
@@ -117,11 +138,22 @@ def main():
     textLabel = Label(textFrame, text="ELO", font=("Comic Sans", 18))
     textLabel.pack()
 
+    websiteFrame = Frame(window, padx=10, pady=10, bd=5)
+    websiteFrame.pack()
+    websiteEntry = Entry(websiteFrame,
+                         font=("Arial", 18),
+                         width=50,
+                         fg="#00FF00",
+                         bg="black",
+                         bd=5
+                         )
+    websiteEntry.insert(0, "https://www.olx.pl/d/muzyka-edukacja/materialy-jezykowe/")
 
-
+    websiteEntry.pack()
 
     frame.pack()
     textFrame.pack()
+
     buttonFrame.pack()
     # listbox = Listbox(window,
     #                   bg = "#CCCCCC",
@@ -136,9 +168,14 @@ def main():
         if messagebox.askokcancel("Quit", "Do you want to quit?"):
             window.destroy()
 
-    window.protocol("WM_DELETE_WINDOW", on_closing)
-    window.mainloop()
 
+    window.protocol("WM_DELETE_WINDOW", on_closing)
+
+    window.mainloop()
+    quit()
 
 if __name__ == "__main__":
     main()
+
+
+
