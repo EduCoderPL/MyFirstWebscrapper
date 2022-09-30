@@ -19,10 +19,10 @@ def main():
         if "Za darmo" in priceText or "Zamienię" in priceText:
             return 1000000.0
         return float(priceText.
-                     replace(" ", "").
-                     replace("zł", "").
-                     replace(",", ".").
-                     replace("donegocjacji", ""))
+                 replace(" ", "").
+                 replace("zł", "").
+                 replace(",", ".").
+                 replace("donegocjacji", ""))
 
 
 
@@ -51,16 +51,15 @@ def main():
         textLabel.config(text=f"Ogarniam stronę: {number}")
         page = get(f"{url}?page={number}")
         bs = BeautifulSoup(page.content, "html.parser")
-
         for offer in bs.find_all("div", class_="css-19ucd76"):
             try:
-                title = offer.find("h6", class_="css-v3vynn-Text eu5v0x0").get_text().strip()
+                title = offer.find("h6", class_="css-1pvd0aj-Text eu5v0x0").get_text().strip()
 
                 footer = offer.find("p", class_="css-p6wsjo-Text eu5v0x0").get_text().strip()
 
                 location = re.split('- ', footer)
 
-                price = offer.find("p", class_="css-wpfvmn-Text eu5v0x0").get_text().strip()
+                price = offer.find("p", class_="css-1q7gvpp-Text eu5v0x0").get_text().strip()
                 offerURL = check_if_otodom(offer.find("a")['href'])
 
 
@@ -68,6 +67,7 @@ def main():
             except Exception as e:
                 print(30 * "=")
                 print(offer)
+                print(e)
                 print(30 * "=")
 
         try:
